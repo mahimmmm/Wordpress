@@ -1,0 +1,162 @@
+/*
+Theme Name: MidnightZone Gaming
+Author: Jules
+Description: A clean, responsive, and ad-friendly gaming theme.
+Version: 1.0
+*/
+
+/* General Styles */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #fff;
+}
+
+a {
+    color: #0073aa;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Header Styles */
+.site-header .header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #ddd;
+}
+
+.site-branding {
+    flex: 1 0 auto;
+}
+
+.main-navigation {
+    flex: 2 1 auto;
+    text-align: center;
+}
+
+.main-navigation ul {
+    display: inline-block;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.main-navigation ul li {
+    display: inline-block;
+    margin: 0 15px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    flex: 1 0 auto;
+    justify-content: flex-end;
+}
+
+.header-search,
+.header-login {
+    margin-left: 20px;
+}
+
+/* Homepage Styles */
+.top-banner-ad,
+.after-hero-banner-ad {
+    text-align: center;
+    padding: 20px;
+    background-color: #f1f1f1;
+    margin: 20px 0;
+}
+
+.hero-section {
+    padding: 20px 0;
+}
+
+.hero-section h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.hero-posts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.hero-post-card {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.hero-post-thumbnail img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.hero-post-title {
+    padding: 15px;
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.hero-post-title a {
+    text-decoration: none;
+    color: #333;
+}
+
+/* Content and Sidebar */
+.site-content {
+    display: flex;
+}
+
+#primary {
+    flex: 3;
+}
+
+#secondary {
+    flex: 1;
+    margin-left: 20px;
+}
+
+/* Footer Styles */
+.site-footer {
+    background-color: #333;
+    color: #fff;
+    padding: 20px;
+    text-align: center;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .site-header .header-container,
+    .site-content {
+        flex-direction: column;
+    }
+
+    .main-navigation ul li {
+        display: block;
+        margin: 10px 0;
+    }
+
+    .header-right {
+        margin-top: 15px;
+    }
+
+    #secondary {
+        margin-left: 0;
+        margin-top: 20px;
+    }
+}
