@@ -25,6 +25,16 @@ A professional multi-proxy, multi-user agent automation tool built with C# and .
 4. Build the project (Build -> Build Solution).
 5. Run the application (F5).
 
+## Creating an Installation Package
+
+To create a professional `.exe` installer for distribution:
+
+1. **Build Standalone**: Double-click `build_dist.bat`. This will generate a self-contained, single-file executable in `bin\Release\net8.0-windows\win-x64\publish\`.
+2. **Install Inno Setup**: Download and install [Inno Setup](https://jrsoftware.org/isdl.php).
+3. **Compile Installer**:
+   - Right-click `installer_script.iss` and select **Compile**.
+   - This will generate `DynamicSessionAutomation_Setup.exe` which you can share with others.
+
 ## How to Use
 
 1. **Load Proxies**: Enter proxies in `ip:port:username:password` format (one per line) or use the "Load Proxies" button.
