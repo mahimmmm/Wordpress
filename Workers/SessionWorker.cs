@@ -19,11 +19,13 @@ namespace DynamicSessionAutomation.Workers
         private Form? _browserForm;
         private readonly CancellationToken _cancellationToken;
         private bool _isDisposed = false;
+        private bool _interactive = false;
 
-        public SessionWorker(SessionConfig config, CancellationToken ct)
+        public SessionWorker(SessionConfig config, CancellationToken ct, bool interactive = false)
         {
             _config = config;
             _cancellationToken = ct;
+            _interactive = interactive;
         }
 
         public async Task<AutomationResult> RunAsync()
@@ -43,7 +45,6 @@ namespace DynamicSessionAutomation.Workers
             {
                 result.Success = false;
                 result.Status = "Cancelled";
-                result.ErrorMessage = "Task was cancelled by user.";
             }
             catch (Exception ex)
             {
@@ -56,7 +57,7 @@ namespace DynamicSessionAutomation.Workers
             {
                 stopwatch.Stop();
                 result.Duration = stopwatch.Elapsed;
-                Cleanup();
+                if (!_interactive) Cleanup();
             }
 
             return result;
@@ -72,21 +73,18 @@ namespace DynamicSessionAutomation.Workers
                 {
                     _browserForm = new Form
                     {
-                        Text = $"Automation Session - {_config.Proxy?.Ip}",
+                        Text = _interactive ? $"Interactive Session - {_config.Proxy?.Ip}" : $"Automation - {_config.Proxy?.Ip}",
                         Size = WindowSizeDetector.GetSizeFromUA(_config.UserAgent),
                         StartPosition = FormStartPosition.Manual
                     };
 
                     var rand = new Random();
-                    _browserForm.Location = new Point(rand.Next(0, 400), rand.Next(0, 300));
+                    _browserForm.Location = new Point(rand.Next(100, 500), rand.Next(100, 400));
 
                     _webView = new WebView2 { Dock = DockStyle.Fill };
                     _browserForm.Controls.Add(_webView);
 
-                    if (!_config.HeadlessMode)
-                    {
-                        _browserForm.Show();
-                    }
+                    if (!_config.HeadlessMode || _interactive) _browserForm.Show();
 
                     var options = new CoreWebView2EnvironmentOptions();
                     if (_config.Proxy != null)
@@ -106,21 +104,27 @@ namespace DynamicSessionAutomation.Workers
                         };
                     }
 
-                    string fpScript = FingerprintManager.GetFingerprintScript(_config.UserAgent);
+                    // Inject Fingerprints with detected Timezone
+                    string fpScript = FingerprintManager.GetFingerprintScript(_config.UserAgent, _config.Timezone);
                     await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(fpScript);
 
-                    Logger.Log("Checking IP security on whoer.net...", LogType.Info);
-                    _webView.CoreWebView2.Navigate("https://whoer.net");
+                    if (!_interactive)
+                    {
+                        Logger.Log("Checking IP security on whoer.net...", LogType.Info);
+                        _webView.CoreWebView2.Navigate("https://whoer.net");
+                    }
+                    else
+                    {
+                        _webView.CoreWebView2.Navigate(_config.TargetUrl);
+                    }
 
                     tcsInit.SetResult(true);
                 }
-                catch (Exception ex)
-                {
-                    tcsInit.TrySetException(ex);
-                }
+                catch (Exception ex) { tcsInit.TrySetException(ex); }
             }));
 
             await tcsInit.Task;
+            if (_interactive) return;
 
             using var ctsCheck = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken);
             ctsCheck.CancelAfter(TimeSpan.FromSeconds(_config.TimeoutSeconds));
@@ -135,35 +139,29 @@ namespace DynamicSessionAutomation.Workers
                 {
                     result.Success = false;
                     result.Status = "Timeout";
-                    result.ErrorMessage = "Whoer.net timeout.";
                     Logger.Log("whoer.net timed out.", LogType.Warning);
                 }
-                else
-                {
-                    throw;
-                }
+                else throw;
             }
 
             if (!result.Success) return;
 
-            Logger.Log($"Anonymity: {result.Anonymity} - SECURE. Opening target URL...", LogType.Success);
+            Logger.Log($"Anonymity: {result.Anonymity} - SECURE. Navigating with Referrer: {_config.Referrer}", LogType.Success);
 
             var targetTcs = new TaskCompletionSource<bool>();
             _webView!.Invoke(new Action(() => {
                 if (!_isDisposed)
                 {
-                    _webView.CoreWebView2.Navigate(_config.TargetUrl);
+                    // Use a request with custom Referrer header
+                    var request = _webView.CoreWebView2.Environment.CreateWebResourceRequest(_config.TargetUrl, "GET", null, $"Referer: {_config.Referrer}\r\n");
+                    _webView.CoreWebView2.NavigateWithWebResourceRequest(request);
                     targetTcs.SetResult(true);
                 }
-                else
-                {
-                    targetTcs.SetException(new ObjectDisposedException("WebView2"));
-                }
+                else targetTcs.SetException(new ObjectDisposedException("WebView2"));
             }));
             await targetTcs.Task;
 
             await Task.Delay(TimeSpan.FromSeconds(5), _cancellationToken);
-
             result.Success = true;
             result.Status = "Completed";
         }
@@ -173,39 +171,27 @@ namespace DynamicSessionAutomation.Workers
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(2000, ct);
-
                 if (_isDisposed) return;
-
                 var evalTcs = new TaskCompletionSource<string>();
-
                 _webView!.Invoke(new Action(async () =>
                 {
-                    try
-                    {
+                    try {
                         if (_isDisposed) { evalTcs.TrySetResult("disposed"); return; }
-                        string script = FingerprintManager.GetWhoerParsingScript();
-                        var res = await _webView.CoreWebView2.ExecuteScriptAsync(script);
+                        var res = await _webView.CoreWebView2.ExecuteScriptAsync(FingerprintManager.GetWhoerParsingScript());
                         evalTcs.TrySetResult(res.Trim('"'));
-                    }
-                    catch { evalTcs.TrySetResult("error"); }
+                    } catch { evalTcs.TrySetResult("error"); }
                 }));
 
                 string anonymity = await evalTcs.Task;
-
                 if (anonymity != null && anonymity.Contains("%"))
                 {
                     result.Anonymity = anonymity;
-                    if (anonymity == "100%")
-                    {
-                        result.Success = true;
-                        return;
-                    }
+                    if (anonymity == "100%") { result.Success = true; return; }
                     else if (anonymity != "unknown" && !anonymity.StartsWith("error"))
                     {
                         result.Success = false;
                         result.Status = "Insecure";
-                        result.ErrorMessage = $"Anonymity only {anonymity}";
-                        Logger.Log($"Insecure IP: {anonymity}. Skipping...", LogType.Error);
+                        Logger.Log($"Insecure IP: {anonymity}.", LogType.Error);
                         return;
                     }
                 }
@@ -216,22 +202,15 @@ namespace DynamicSessionAutomation.Workers
         {
             if (_isDisposed) return;
             _isDisposed = true;
-
-            try
-            {
-                _browserForm?.Invoke(new Action(() =>
-                {
+            try {
+                _browserForm?.Invoke(new Action(() => {
                     _webView?.Dispose();
                     _browserForm?.Close();
                     _browserForm?.Dispose();
                 }));
-            }
-            catch { }
+            } catch { }
         }
 
-        public void Dispose()
-        {
-            Cleanup();
-        }
+        public void Dispose() => Cleanup();
     }
 }

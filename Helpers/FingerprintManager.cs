@@ -4,13 +4,16 @@ namespace DynamicSessionAutomation.Helpers
 {
     public static class FingerprintManager
     {
-        public static string GetFingerprintScript(string userAgent)
+        public static string GetFingerprintScript(string userAgent, string timezone = "UTC")
         {
             string platform = "Win32";
             if (userAgent.Contains("Macintosh")) platform = "MacIntel";
             else if (userAgent.Contains("Linux")) platform = "Linux x86_64";
 
             int cores = new Random().Next(4, 17);
+
+            // Random MAC-like ID
+            string macId = Guid.NewGuid().ToString("N").Substring(0, 12);
 
             return $@"
                 // Overwrite Navigator properties
@@ -19,20 +22,23 @@ namespace DynamicSessionAutomation.Helpers
                 Object.defineProperty(navigator, 'languages', {{ get: () => ['en-US', 'en'] }});
                 Object.defineProperty(navigator, 'hardwareConcurrency', {{ get: () => {cores} }});
 
-                // WebGL Vendor/Renderer override
-                const getParameter = WebGLRenderingContext.prototype.getParameter;
-                WebGLRenderingContext.prototype.getParameter = function(parameter) {{
-                    if (parameter === 37445) return 'Intel Inc.';
-                    if (parameter === 37446) return 'Intel(R) UHD Graphics 620';
-                    return getParameter.apply(this, arguments);
-                }};
-
-                // WebGL Rendering Noise
-                const originalDrawArrays = WebGLRenderingContext.prototype.drawArrays;
-                WebGLRenderingContext.prototype.drawArrays = function(mode, first, count) {{
-                    // Add subtle noise by changing the count or offset slightly (carefully)
-                    return originalDrawArrays.apply(this, arguments);
-                }};
+                // Mock MAC / Hardware ID
+                (function() {{
+                    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+                    HTMLCanvasElement.prototype.getContext = function(type, attributes) {{
+                        const context = originalGetContext.apply(this, arguments);
+                        if (type === 'webgl' || type === 'experimental-webgl' || type === 'webgl2') {{
+                            // WebGL Vendor override
+                            const getParameter = context.getParameter;
+                            context.getParameter = function(parameter) {{
+                                if (parameter === 37445) return 'Intel Inc.';
+                                if (parameter === 37446) return 'Intel(R) UHD Graphics 620';
+                                return getParameter.apply(this, arguments);
+                            }};
+                        }}
+                        return context;
+                    }};
+                }})();
 
                 // Canvas Fingerprint Protection (Noise)
                 const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
@@ -44,20 +50,24 @@ namespace DynamicSessionAutomation.Helpers
                     return imageData;
                 }};
 
-                // AudioContext Fingerprint Protection
-                const originalGetChannelData = AudioBuffer.prototype.getChannelData;
-                AudioBuffer.prototype.getChannelData = function() {{
-                    const data = originalGetChannelData.apply(this, arguments);
-                    for (let i = 0; i < data.length; i++) {{
-                        data[i] = data[i] + (Math.random() * 0.0001);
-                    }}
-                    return data;
-                }};
+                // Timezone Emulation
+                try {{
+                    const IntlOriginal = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                    Intl.DateTimeFormat.prototype.resolvedOptions = (function() {{
+                        const original = Intl.DateTimeFormat.prototype.resolvedOptions;
+                        return function() {{
+                            const options = original.apply(this, arguments);
+                            options.timeZone = '{timezone}';
+                            return options;
+                        }};
+                    }})();
+                }} catch(e) {{}}
 
-                // Timezone Emulation (Mocking Date methods)
-                const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
+                // Override Date to match timezone
+                // (Note: full Date override is complex, this handles basic JS timezone checks)
                 Date.prototype.getTimezoneOffset = function() {{
-                    return 0; // Force UTC
+                    // Simple offset logic could be added here if needed
+                    return 0;
                 }};
             ";
         }
@@ -68,12 +78,8 @@ namespace DynamicSessionAutomation.Helpers
                 (function() {
                     try {
                         let percentElement = document.querySelector('.your-anonymity .percent');
-                        if (!percentElement) {
-                            percentElement = document.querySelector('.anonymity-percent');
-                        }
-                        if (percentElement) {
-                            return percentElement.innerText.trim();
-                        }
+                        if (!percentElement) percentElement = document.querySelector('.anonymity-percent');
+                        if (percentElement) return percentElement.innerText.trim();
 
                         let allTexts = document.body.innerText;
                         let match = allTexts.match(/Anonymity:\s*(\d+)%/i);
@@ -81,7 +87,7 @@ namespace DynamicSessionAutomation.Helpers
 
                         return 'unknown';
                     } catch (e) {
-                        return 'error: ' + e.message;
+                        return 'error';
                     }
                 })();
             ";
