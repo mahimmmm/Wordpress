@@ -1,0 +1,8 @@
+{
+  "Timeout": 30,
+  "Delay": 3,
+  "AutoClean": true,
+  "SaveLogs": true,
+  "Headless": false,
+  "TargetUrl": "https://www.google.com"
+}
