@@ -30,6 +30,25 @@ namespace DynamicSessionAutomation
             Logger.Initialize(this.txtLog);
         }
 
+        private void BtnNav_Click(object sender, EventArgs e)
+        {
+            if (sender is Button btn)
+            {
+                if (btn == btnNavSetup) tabContent.SelectedIndex = 0;
+                else if (btn == btnNavProfiles) tabContent.SelectedIndex = 1;
+                else if (btn == btnNavLogs) tabContent.SelectedIndex = 2;
+            }
+        }
+
+        private string GenerateRandomMac()
+        {
+            Random random = new Random();
+            byte[] buffer = new byte[6];
+            random.NextBytes(buffer);
+            buffer[0] = (byte)(buffer[0] & 0xFE | 0x02); // Local & Unicast
+            return string.Join(":", buffer.Select(b => b.ToString("X2")));
+        }
+
         private void BtnLoadProxies_Click(object sender, EventArgs e)
         {
             using OpenFileDialog ofd = new OpenFileDialog { Filter = "Text Files|*.txt" };
@@ -95,6 +114,7 @@ namespace DynamicSessionAutomation
                 var geo = await GeoHelper.GetGeoDataAsync(proxy.Ip);
                 Logger.Log($"Detected Timezone: {geo.Timezone}", LogType.Info);
 
+                    string mac = GenerateRandomMac();
                 var config = new SessionConfig
                 {
                     Proxy = proxy,
@@ -102,6 +122,7 @@ namespace DynamicSessionAutomation
                     TargetUrl = targetUrl,
                     Referrer = _referrers[new Random().Next(_referrers.Length)],
                     Timezone = geo.Timezone,
+                        MacAddress = mac,
                     TimeoutSeconds = (int)numTimeout.Value,
                     DelaySeconds = (int)numDelay.Value,
                     HeadlessMode = chkHeadless.Checked,
@@ -121,6 +142,7 @@ namespace DynamicSessionAutomation
                         ProxyIp = proxy.Ip,
                         UserAgent = ua,
                         Timezone = geo.Timezone,
+                        MacAddress = mac, // Unique MAC for each profile
                         Anonymity = result.Anonymity,
                         Status = "Success",
                         UserDataDir = config.UserDataDir,
@@ -164,7 +186,7 @@ namespace DynamicSessionAutomation
                 dgvProfiles.Invoke(new Action(() => UpdateDashboard(profile)));
                 return;
             }
-            dgvProfiles.Rows.Add(profile.Name, profile.ProxyIp, profile.Status, profile.Anonymity, profile.Timezone);
+            dgvProfiles.Rows.Add(profile.Name, profile.ProxyIp, profile.MacAddress, profile.Timezone, profile.Anonymity);
         }
 
         private void BtnOpenProfile_Click(object sender, EventArgs e)

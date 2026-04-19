@@ -4,7 +4,7 @@ namespace DynamicSessionAutomation.Helpers
 {
     public static class FingerprintManager
     {
-        public static string GetFingerprintScript(string userAgent, string timezone = "UTC")
+        public static string GetFingerprintScript(string userAgent, string timezone = "UTC", string macAddress = "")
         {
             string platform = "Win32";
             if (userAgent.Contains("Macintosh")) platform = "MacIntel";
@@ -12,8 +12,8 @@ namespace DynamicSessionAutomation.Helpers
 
             int cores = new Random().Next(4, 17);
 
-            // Generate a unique Hardware/MAC-like ID for this profile
-            string profileHardwareId = Guid.NewGuid().ToString("N");
+            // Use the provided MAC address or generate a unique Hardware/MAC-like ID for this profile
+            string profileHardwareId = !string.IsNullOrEmpty(macAddress) ? macAddress.Replace(":", "") : Guid.NewGuid().ToString("N");
             string deviceId1 = Guid.NewGuid().ToString("N");
             string deviceId2 = Guid.NewGuid().ToString("N");
 

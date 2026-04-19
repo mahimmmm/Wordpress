@@ -104,8 +104,8 @@ namespace DynamicSessionAutomation.Workers
                         };
                     }
 
-                    // Inject Fingerprints with detected Timezone
-                    string fpScript = FingerprintManager.GetFingerprintScript(_config.UserAgent, _config.Timezone);
+                    // Inject Fingerprints with detected Timezone and MAC
+                    string fpScript = FingerprintManager.GetFingerprintScript(_config.UserAgent, _config.Timezone, _config.MacAddress);
                     await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(fpScript);
 
                     if (!_interactive)
