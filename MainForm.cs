@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using DynamicSessionAutomation.Models;
 using DynamicSessionAutomation.Helpers;
@@ -14,6 +15,65 @@ namespace DynamicSessionAutomation
     public partial class MainForm : Form
     {
         private CancellationTokenSource? _cts;
+
+        // Borderless Window Logic
+        public const int WM_NCLBUTTONDOWN = 0xA1;
+        public const int HT_CAPTION = 0x2;
+
+        [DllImport("user32.dll")]
+        public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+        [DllImport("user32.dll")]
+        public static extern bool ReleaseCapture();
+
+        private void TitleBar_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                ReleaseCapture();
+                SendMessage(Handle, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+            }
+        }
+
+        // Window Resizing Logic for Borderless Form
+        protected override void WndProc(ref Message m)
+        {
+            const int wmNcHitTest = 0x84;
+            const int htLeft = 10;
+            const int htRight = 11;
+            const int htTop = 12;
+            const int htTopLeft = 13;
+            const int htTopRight = 14;
+            const int htBottom = 15;
+            const int htBottomLeft = 16;
+            const int htBottomRight = 17;
+
+            if (m.Msg == wmNcHitTest)
+            {
+                int x = LParamToPoint(m.LParam).X;
+                int y = LParamToPoint(m.LParam).Y;
+                Point p = PointToClient(new Point(x, y));
+
+                if (p.X <= 10 && p.Y <= 10) m.Result = (IntPtr)htTopLeft;
+                else if (p.X >= ClientSize.Width - 10 && p.Y <= 10) m.Result = (IntPtr)htTopRight;
+                else if (p.X <= 10 && p.Y >= ClientSize.Height - 10) m.Result = (IntPtr)htBottomLeft;
+                else if (p.X >= ClientSize.Width - 10 && p.Y >= ClientSize.Height - 10) m.Result = (IntPtr)htBottomRight;
+                else if (p.X <= 10) m.Result = (IntPtr)htLeft;
+                else if (p.X >= ClientSize.Width - 10) m.Result = (IntPtr)htRight;
+                else if (p.Y <= 10) m.Result = (IntPtr)htTop;
+                else if (p.Y >= ClientSize.Height - 10) m.Result = (IntPtr)htBottom;
+                else m.Result = (IntPtr)0x1; // HTCLIENT
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        private Point LParamToPoint(IntPtr lParam)
+        {
+            int x = (short)(lParam.ToInt32() & 0xFFFF);
+            int y = (short)((lParam.ToInt32() >> 16) & 0xFFFF);
+            return new Point(x, y);
+        }
+
         private List<ProfileInfo> _profiles = new();
         private bool _isRunning = false;
         private string[] _referrers = {
