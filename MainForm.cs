@@ -34,7 +34,6 @@ namespace DynamicSessionAutomation
             }
         }
 
-        // Window Resizing Logic for Borderless Form
         protected override void WndProc(ref Message m)
         {
             const int wmNcHitTest = 0x84;
@@ -61,7 +60,7 @@ namespace DynamicSessionAutomation
                 else if (p.X >= ClientSize.Width - 10) m.Result = (IntPtr)htRight;
                 else if (p.Y <= 10) m.Result = (IntPtr)htTop;
                 else if (p.Y >= ClientSize.Height - 10) m.Result = (IntPtr)htBottom;
-                else m.Result = (IntPtr)0x1; // HTCLIENT
+                else m.Result = (IntPtr)0x1;
                 return;
             }
             base.WndProc(ref m);
@@ -80,7 +79,7 @@ namespace DynamicSessionAutomation
             "https://www.facebook.com/",
             "https://www.youtube.com/",
             "https://www.pinterest.com/",
-            "https://t.co/", // Twitter
+            "https://t.co/",
             "https://www.instagram.com/"
         };
 
@@ -105,7 +104,7 @@ namespace DynamicSessionAutomation
             Random random = new Random();
             byte[] buffer = new byte[6];
             random.NextBytes(buffer);
-            buffer[0] = (byte)(buffer[0] & 0xFE | 0x02); // Local & Unicast
+            buffer[0] = (byte)(buffer[0] & 0xFE | 0x02);
             return string.Join(":", buffer.Select(b => b.ToString("X2")));
         }
 
@@ -121,42 +120,42 @@ namespace DynamicSessionAutomation
             if (ofd.ShowDialog() == DialogResult.OK) txtUserAgents.Text = File.ReadAllText(ofd.FileName);
         }
 
-        private void Txt_DragEnter(object sender, DragEventArgs e)
-        {
-            if (e.Data!.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy;
-        }
-
-        private void TxtProxies_DragDrop(object sender, DragEventArgs e)
-        {
-            string[] files = (string[])e.Data!.GetData(DataFormats.FileDrop)!;
-            if (files.Length > 0) txtProxies.Text = File.ReadAllText(files[0]);
-        }
-
-        private void TxtUA_DragDrop(object sender, DragEventArgs e)
-        {
-            string[] files = (string[])e.Data!.GetData(DataFormats.FileDrop)!;
-            if (files.Length > 0) txtUserAgents.Text = File.ReadAllText(files[0]);
-        }
-
         private async void BtnStart_Click(object sender, EventArgs e)
         {
             if (_isRunning) return;
 
-            var proxyList = ProxyManager.ParseProxies(txtProxies.Lines);
-            var uaList = UserAgentManager.FilterUserAgents(txtUserAgents.Lines);
+            string proxiesText = txtProxies.Text.Trim();
+            string uaText = txtUserAgents.Text.Trim();
             string targetUrl = txtTargetUrl.Text.Trim();
 
-            if (string.IsNullOrEmpty(targetUrl) || proxyList.Count == 0 || uaList.Count == 0)
+            var proxyLines = proxiesText.Split(new[] { "\n", "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var uaLines = uaText.Split(new[] { "\n", "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+            var proxyList = ProxyManager.ParseProxies(proxyLines);
+            var uaList = UserAgentManager.FilterUserAgents(uaLines);
+
+            if (string.IsNullOrEmpty(targetUrl))
             {
-                MessageBox.Show("Please provide Target URL, Proxies, and User Agents.");
+                MessageBox.Show("Target URL (link set) is empty!", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+            if (proxyList.Count == 0)
+            {
+                MessageBox.Show($"No valid proxies found! Detected {proxyLines.Length} lines, but 0 were valid. Format: ip:port:user:pass", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (uaList.Count == 0)
+            {
+                MessageBox.Show("User Agent list is empty!", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            Logger.Log($"Starting Automation with {proxyList.Count} Proxies and {uaList.Count} UAs.", LogType.Info);
 
             _isRunning = true;
             _cts = new CancellationTokenSource();
             ToggleUI(false);
 
-            Logger.Log("Starting Pro Automation...", LogType.Progress);
             int successCount = 0;
             int proxyIndex = 0;
             int uaIndex = 0;
@@ -168,13 +167,11 @@ namespace DynamicSessionAutomation
                 var proxy = proxyList[proxyIndex];
                 var ua = uaList[uaIndex];
 
-                Logger.Log($"🚀 Creating Profile {successCount + 1} using Proxy {proxy.Ip}", LogType.Info);
+                Logger.Log($"🚀 Profile {successCount + 1} - Proxy: {proxy.Ip}", LogType.Info);
 
-                // Get Geo Data for Timezone
                 var geo = await GeoHelper.GetGeoDataAsync(proxy.Ip);
-                Logger.Log($"Detected Timezone: {geo.Timezone}", LogType.Info);
+                string mac = GenerateRandomMac();
 
-                    string mac = GenerateRandomMac();
                 var config = new SessionConfig
                 {
                     Proxy = proxy,
@@ -182,7 +179,7 @@ namespace DynamicSessionAutomation
                     TargetUrl = targetUrl,
                     Referrer = _referrers[new Random().Next(_referrers.Length)],
                     Timezone = geo.Timezone,
-                        MacAddress = mac,
+                    MacAddress = mac,
                     TimeoutSeconds = (int)numTimeout.Value,
                     DelaySeconds = (int)numDelay.Value,
                     HeadlessMode = chkHeadless.Checked,
@@ -194,41 +191,37 @@ namespace DynamicSessionAutomation
 
                 if (result.Success)
                 {
-                    Logger.Log($"✅ Profile {successCount + 1} SECURE & READY", LogType.Success);
-
                     var profile = new ProfileInfo
                     {
                         Name = $"Profile {successCount + 1}",
                         ProxyIp = proxy.Ip,
                         UserAgent = ua,
                         Timezone = geo.Timezone,
-                        MacAddress = mac, // Unique MAC for each profile
+                        MacAddress = mac,
                         Anonymity = result.Anonymity,
-                        Status = "Success",
+                        Status = "Active",
                         UserDataDir = config.UserDataDir,
                         Config = config
                     };
 
                     _profiles.Add(profile);
                     UpdateDashboard(profile);
-
                     successCount++;
-                    uaIndex++; // Move to next UA
+                    uaIndex++;
 
                     if (successCount < uaList.Count)
                         await Task.Delay(config.DelaySeconds * 1000, _cts.Token);
                 }
                 else
                 {
-                    Logger.Log($"❌ Proxy {proxy.Ip} Failed ({result.Status}). Retrying with next proxy...", LogType.Warning);
-                    if (chkAutoClean.Checked) FileHelper.DeleteDirectory(config.UserDataDir);
+                    Logger.Log($"❌ Proxy {proxy.Ip} Failed. Trying next proxy...", LogType.Warning);
                 }
 
-                proxyIndex++; // Always move to next proxy
+                proxyIndex++;
                 UpdateProgress(successCount, uaList.Count);
             }
 
-            Logger.Log("Automation Finished.", LogType.Progress);
+            Logger.Log("Automation Task Finished.", LogType.Progress);
             _isRunning = false;
             ToggleUI(true);
         }
@@ -236,31 +229,24 @@ namespace DynamicSessionAutomation
         private void BtnStop_Click(object sender, EventArgs e)
         {
             _cts?.Cancel();
-            Logger.Log("Stopping...", LogType.Warning);
+            Logger.Log("Automation Stopped.", LogType.Warning);
         }
 
         private void UpdateDashboard(ProfileInfo profile)
         {
-            if (dgvProfiles.InvokeRequired)
-            {
-                dgvProfiles.Invoke(new Action(() => UpdateDashboard(profile)));
-                return;
-            }
+            if (dgvProfiles.InvokeRequired) { dgvProfiles.Invoke(new Action(() => UpdateDashboard(profile))); return; }
             dgvProfiles.Rows.Add(profile.Name, profile.ProxyIp, profile.MacAddress, profile.Timezone, profile.Anonymity);
         }
 
         private void BtnOpenProfile_Click(object sender, EventArgs e)
         {
             if (dgvProfiles.SelectedRows.Count == 0) return;
-
             string profileName = dgvProfiles.SelectedRows[0].Cells[0].Value.ToString()!;
             var profile = _profiles.FirstOrDefault(p => p.Name == profileName);
-
             if (profile != null && profile.Config != null)
             {
-                Logger.Log($"Opening {profileName} manually...", LogType.Info);
                 var interactiveWorker = new SessionWorker(profile.Config, CancellationToken.None, true);
-                _ = interactiveWorker.RunAsync(); // Run fire-and-forget
+                _ = interactiveWorker.RunAsync();
             }
         }
 
@@ -269,22 +255,16 @@ namespace DynamicSessionAutomation
             if (statusStrip.InvokeRequired) { statusStrip.Invoke(new Action(() => UpdateProgress(current, total))); return; }
             progressBar.Maximum = total;
             progressBar.Value = Math.Min(current, total);
-            lblStatus.Text = $"Profiles Created: {current} / {total} | Proxies Used: {_profiles.Count}";
+            lblStatus.Text = $"Profiles: {current}/{total} | Ready";
         }
 
         private void ToggleUI(bool enabled)
         {
             btnStart.Enabled = enabled;
-            groupSettings.Enabled = enabled;
             txtTargetUrl.ReadOnly = !enabled;
         }
 
-        private void BtnExport_Click(object sender, EventArgs e)
-        {
-            // Similar to previous implementation
-            MessageBox.Show("Report exported.");
-        }
-
+        private void BtnExport_Click(object sender, EventArgs e) => MessageBox.Show("Report exported.");
         private void BtnClearLog_Click(object sender, EventArgs e) => txtLog.Clear();
     }
 }
